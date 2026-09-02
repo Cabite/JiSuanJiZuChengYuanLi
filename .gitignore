@@ -1,0 +1,32 @@
+# Course reports and other documentation
+*.md
+*.doc
+*.docx
+*.pdf
+*.png
+*.jpg
+*.jpeg
+
+# Vivado generated directories
+.Xil/
+*.cache/
+*.hw/
+*.ip_user_files/
+*.runs/
+*.sim/
+*.gen/
+
+# Vivado and simulator generated files
+*.jou
+*.log
+*.str
+*.wdb
+*.pb
+*.backup.*
+webtalk*.xml
+webtalk*.jou
+
+# General temporary files
+*.tmp
+*.swp
+*~
