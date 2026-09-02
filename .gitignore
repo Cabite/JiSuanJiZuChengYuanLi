@@ -1,5 +1,6 @@
 # Course reports and other documentation
 *.md
+!README.md
 *.doc
 *.docx
 *.pdf
