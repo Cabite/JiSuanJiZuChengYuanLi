@@ -31,7 +31,14 @@ module cpu_core #(
     output wire [63:0] mispredict_count,
     output wire [63:0] load_stall_count,
     output wire [63:0] mem_wait_count,
-    output wire [63:0] flush_count
+    output wire [63:0] flush_count,
+
+    // Observation-only ports: values apply at the upcoming rising edge.
+    output wire        debug_write_enable,
+    output wire [4:0]  debug_write_addr,
+    output wire [31:0] debug_write_data,
+    output wire        debug_retire,
+    output wire [31:0] debug_wb_pc
 );
 
     // Centralized pipeline-control signals.
@@ -185,6 +192,11 @@ module cpu_core #(
     wire        write_enable_w;
 
     assign imem_addr = pc_f;
+    assign debug_write_enable = write_enable_w;
+    assign debug_write_addr = dest_w;
+    assign debug_write_data = write_data_w;
+    assign debug_retire = retire_fire;
+    assign debug_wb_pc = pc_w;
     assign pc_plus4_f = pc_f + 32'd4;
     assign jump_target_d = {pc_plus4_d[31:28], inst_d[25:0], 2'b00};
     assign jump_direct_event_d = valid_d && !illegal_d && jump_direct_d;
