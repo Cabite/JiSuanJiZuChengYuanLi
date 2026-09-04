@@ -1,11 +1,6 @@
 `timescale 1ns / 1ps
 `include "cpu_defs.vh"
 
-// Hardwired decoder for the current instruction subset:
-// add, addu, sub, subu, and, or, jr, addi, addiu, lui, lw, sw,
-// beq, bne, j and jal.
-// Unsupported instructions are converted to side-effect-free operations and
-// flagged with illegal=1. The all-zero instruction is a legal NOP.
 module control_unit(
     input  wire [5:0] opcode,
     input  wire [5:0] funct,
@@ -31,7 +26,7 @@ module control_unit(
 );
 
     always @(*) begin
-        // Safe defaults: no architectural side effects.
+        // 默认值：无副作用
         reg_write     = 1'b0;
         dest_sel      = `DEST_RD;
         alu_src_b     = 1'b0;
@@ -51,7 +46,6 @@ module control_unit(
         illegal       = 1'b1;
 
         if (is_zero_inst) begin
-            // 32'h0000_0000 is treated as a legal side-effect-free NOP.
             illegal = 1'b0;
         end else begin
             case (opcode)
@@ -67,7 +61,6 @@ module control_unit(
                             uses_rt        = 1'b1;
                             illegal        = 1'b0;
                         end
-
                         `FUNCT_ADDU: begin
                             reg_write      = 1'b1;
                             dest_sel       = `DEST_RD;
@@ -78,7 +71,6 @@ module control_unit(
                             uses_rt        = 1'b1;
                             illegal        = 1'b0;
                         end
-
                         `FUNCT_SUB: begin
                             reg_write      = 1'b1;
                             dest_sel       = `DEST_RD;
@@ -89,7 +81,6 @@ module control_unit(
                             uses_rt        = 1'b1;
                             illegal        = 1'b0;
                         end
-
                         `FUNCT_SUBU: begin
                             reg_write      = 1'b1;
                             dest_sel       = `DEST_RD;
@@ -100,7 +91,6 @@ module control_unit(
                             uses_rt        = 1'b1;
                             illegal        = 1'b0;
                         end
-
                         `FUNCT_AND: begin
                             reg_write      = 1'b1;
                             dest_sel       = `DEST_RD;
@@ -110,7 +100,6 @@ module control_unit(
                             uses_rt        = 1'b1;
                             illegal        = 1'b0;
                         end
-
                         `FUNCT_OR: begin
                             reg_write      = 1'b1;
                             dest_sel       = `DEST_RD;
@@ -120,16 +109,78 @@ module control_unit(
                             uses_rt        = 1'b1;
                             illegal        = 1'b0;
                         end
-
+                        // 新增 R 型指令
+                        `FUNCT_XOR: begin
+                            reg_write      = 1'b1;
+                            dest_sel       = `DEST_RD;
+                            alu_control    = `ALU_XOR;
+                            result_src     = `RESULT_ALU;
+                            uses_rs        = 1'b1;
+                            uses_rt        = 1'b1;
+                            illegal        = 1'b0;
+                        end
+                        `FUNCT_NOR: begin
+                            reg_write      = 1'b1;
+                            dest_sel       = `DEST_RD;
+                            alu_control    = `ALU_NOR;
+                            result_src     = `RESULT_ALU;
+                            uses_rs        = 1'b1;
+                            uses_rt        = 1'b1;
+                            illegal        = 1'b0;
+                        end
+                        `FUNCT_SLT: begin
+                            reg_write      = 1'b1;
+                            dest_sel       = `DEST_RD;
+                            alu_control    = `ALU_SLT;
+                            result_src     = `RESULT_ALU;
+                            uses_rs        = 1'b1;
+                            uses_rt        = 1'b1;
+                            illegal        = 1'b0;
+                        end
+                        `FUNCT_SLTU: begin
+                            reg_write      = 1'b1;
+                            dest_sel       = `DEST_RD;
+                            alu_control    = `ALU_SLTU;
+                            result_src     = `RESULT_ALU;
+                            uses_rs        = 1'b1;
+                            uses_rt        = 1'b1;
+                            illegal        = 1'b0;
+                        end
+                        `FUNCT_SLL: begin
+                            reg_write      = 1'b1;
+                            dest_sel       = `DEST_RD;
+                            alu_control    = `ALU_SLL;
+                            result_src     = `RESULT_ALU;
+                            uses_rs        = 1'b0;
+                            uses_rt        = 1'b1;
+                            illegal        = 1'b0;
+                        end
+                        `FUNCT_SRL: begin
+                            reg_write      = 1'b1;
+                            dest_sel       = `DEST_RD;
+                            alu_control    = `ALU_SRL;
+                            result_src     = `RESULT_ALU;
+                            uses_rs        = 1'b0;
+                            uses_rt        = 1'b1;
+                            illegal        = 1'b0;
+                        end
+                        `FUNCT_SRA: begin
+                            reg_write      = 1'b1;
+                            dest_sel       = `DEST_RD;
+                            alu_control    = `ALU_SRA;
+                            result_src     = `RESULT_ALU;
+                            uses_rs        = 1'b0;
+                            uses_rt        = 1'b1;
+                            illegal        = 1'b0;
+                        end
                         `FUNCT_JR: begin
                             jump_reg       = 1'b1;
                             uses_rs        = 1'b1;
                             uses_rt        = 1'b0;
                             illegal        = 1'b0;
                         end
-
                         default: begin
-                            // Keep safe defaults and illegal=1.
+                            // 保留默认值
                         end
                     endcase
                 end
@@ -153,6 +204,68 @@ module control_unit(
                     alu_src_b      = 1'b1;
                     imm_mode       = `IMM_SIGN;
                     alu_control    = `ALU_ADD;
+                    result_src     = `RESULT_ALU;
+                    check_overflow = 1'b0;
+                    uses_rs        = 1'b1;
+                    uses_rt        = 1'b0;
+                    illegal        = 1'b0;
+                end
+
+                // 新增 I 型指令
+                `OP_ANDI: begin
+                    reg_write      = 1'b1;
+                    dest_sel       = `DEST_RT;
+                    alu_src_b      = 1'b1;
+                    imm_mode       = `IMM_ZERO;
+                    alu_control    = `ALU_AND;
+                    result_src     = `RESULT_ALU;
+                    check_overflow = 1'b0;
+                    uses_rs        = 1'b1;
+                    uses_rt        = 1'b0;
+                    illegal        = 1'b0;
+                end
+                `OP_ORI: begin
+                    reg_write      = 1'b1;
+                    dest_sel       = `DEST_RT;
+                    alu_src_b      = 1'b1;
+                    imm_mode       = `IMM_ZERO;
+                    alu_control    = `ALU_OR;
+                    result_src     = `RESULT_ALU;
+                    check_overflow = 1'b0;
+                    uses_rs        = 1'b1;
+                    uses_rt        = 1'b0;
+                    illegal        = 1'b0;
+                end
+                `OP_XORI: begin
+                    reg_write      = 1'b1;
+                    dest_sel       = `DEST_RT;
+                    alu_src_b      = 1'b1;
+                    imm_mode       = `IMM_ZERO;
+                    alu_control    = `ALU_XOR;
+                    result_src     = `RESULT_ALU;
+                    check_overflow = 1'b0;
+                    uses_rs        = 1'b1;
+                    uses_rt        = 1'b0;
+                    illegal        = 1'b0;
+                end
+                `OP_SLTI: begin
+                    reg_write      = 1'b1;
+                    dest_sel       = `DEST_RT;
+                    alu_src_b      = 1'b1;
+                    imm_mode       = `IMM_SIGN;
+                    alu_control    = `ALU_SLT;
+                    result_src     = `RESULT_ALU;
+                    check_overflow = 1'b0;
+                    uses_rs        = 1'b1;
+                    uses_rt        = 1'b0;
+                    illegal        = 1'b0;
+                end
+                `OP_SLTIU: begin
+                    reg_write      = 1'b1;
+                    dest_sel       = `DEST_RT;
+                    alu_src_b      = 1'b1;
+                    imm_mode       = `IMM_SIGN;
+                    alu_control    = `ALU_SLTU;
                     result_src     = `RESULT_ALU;
                     check_overflow = 1'b0;
                     uses_rs        = 1'b1;
@@ -201,12 +314,14 @@ module control_unit(
                     illegal        = 1'b0;
                 end
 
+                // 分支指令：显式清零 jump_direct
                 `OP_BEQ: begin
                     alu_control = `ALU_SUB;
                     branch_eq   = 1'b1;
                     uses_rs     = 1'b1;
                     uses_rt     = 1'b1;
                     illegal     = 1'b0;
+                    jump_direct = 1'b0;
                 end
 
                 `OP_BNE: begin
@@ -215,6 +330,7 @@ module control_unit(
                     uses_rs     = 1'b1;
                     uses_rt     = 1'b1;
                     illegal     = 1'b0;
+                    jump_direct = 1'b0;
                 end
 
                 `OP_J: begin
@@ -232,7 +348,7 @@ module control_unit(
                 end
 
                 default: begin
-                    // Keep safe defaults and illegal=1.
+                    // 保留默认值
                 end
             endcase
         end

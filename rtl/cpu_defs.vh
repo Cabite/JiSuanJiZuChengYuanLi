@@ -30,7 +30,7 @@
 `define RESULT_PC4 2'b10
 `define RESULT_LUI 2'b11
 
-// Opcodes used by the stage-2 minimum instruction subset.
+// ========== Opcodes used by the stage-2 minimum instruction subset ==========
 `define OP_RTYPE 6'b000000
 `define OP_ADDI  6'b001000
 `define OP_ADDIU 6'b001001
@@ -42,13 +42,29 @@
 `define OP_J     6'b000010
 `define OP_JAL   6'b000011
 
-// R-type function codes used by the stage-2 minimum instruction subset.
-`define FUNCT_ADD 6'b100000
+// ========== 新增 I 型指令 opcode ==========
+`define OP_ANDI  6'b001100
+`define OP_ORI   6'b001101
+`define OP_XORI  6'b001110
+`define OP_SLTI  6'b001010
+`define OP_SLTIU 6'b001011
+
+// ========== R-type function codes used by the stage-2 minimum ==========
+`define FUNCT_ADD  6'b100000
 `define FUNCT_ADDU 6'b100001
-`define FUNCT_SUB 6'b100010
+`define FUNCT_SUB  6'b100010
 `define FUNCT_SUBU 6'b100011
-`define FUNCT_AND 6'b100100
-`define FUNCT_OR  6'b100101
-`define FUNCT_JR  6'b001000
+`define FUNCT_AND  6'b100100
+`define FUNCT_OR   6'b100101
+`define FUNCT_JR   6'b001000
+
+// ========== 新增 R 型指令 funct ==========
+`define FUNCT_XOR  6'b100110
+`define FUNCT_NOR  6'b100111
+`define FUNCT_SLT  6'b101010
+`define FUNCT_SLTU 6'b101011
+`define FUNCT_SLL  6'b000000
+`define FUNCT_SRL  6'b000010
+`define FUNCT_SRA  6'b000011
 
 `endif

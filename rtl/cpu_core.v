@@ -1,12 +1,9 @@
 `timescale 1ns / 1ps
 `include "cpu_defs.vh"
 
-// Minimum five-stage CPU core.
-// Supported instructions: add, addu, sub, subu, and, or, addi, addiu, lui,
-// lw, sw, beq, bne, j, jal and jr.  Control transfers have no delay slot.
 module cpu_core #(
     parameter RESET_PC = 32'h0000_0000,
-    parameter PRED_MODE = 0
+    parameter PRED_MODE = 1
 )(
     input  wire        clk,
     input  wire        reset,
@@ -33,7 +30,6 @@ module cpu_core #(
     output wire [63:0] mem_wait_count,
     output wire [63:0] flush_count,
 
-    // Observation-only ports: values apply at the upcoming rising edge.
     output wire        debug_write_enable,
     output wire [4:0]  debug_write_addr,
     output wire [31:0] debug_write_data,
@@ -67,6 +63,8 @@ module cpu_core #(
     wire [31:0] pred_target_f;
     wire [5:0]  pred_index_f;
     wire        btb_hit_f;
+    wire        is_branch_f;
+    wire        pred_taken_gated_f;
 
     // IF/ID outputs.
     wire        valid_d;
@@ -191,6 +189,9 @@ module cpu_core #(
     reg  [31:0] write_data_w;
     wire        write_enable_w;
 
+    // ------------------------------------------------------------------
+    // 主要赋值
+    // ------------------------------------------------------------------
     assign imem_addr = pc_f;
     assign debug_write_enable = write_enable_w;
     assign debug_write_addr = dest_w;
@@ -198,22 +199,36 @@ module cpu_core #(
     assign debug_retire = retire_fire;
     assign debug_wb_pc = pc_w;
     assign pc_plus4_f = pc_f + 32'd4;
+    // Decode in IF: only real conditional branches may steer the PC.
+    assign is_branch_f = (imem_rdata[31:26] == `OP_BEQ) ||
+                         (imem_rdata[31:26] == `OP_BNE);
+    assign pred_taken_gated_f = pred_taken_f && is_branch_f;
     assign jump_target_d = {pc_plus4_d[31:28], inst_d[25:0], 2'b00};
     assign jump_direct_event_d = valid_d && !illegal_d && jump_direct_d;
 
-    // Oldest control event wins.  Static prediction keeps pred_taken_f low;
-    // the predictor inputs already make the PC path ready for stage 8.
+    // ============================================================
+    // 关键修复：next_pc_f 完全由组合逻辑直接驱动
+    // 当 jump_direct_event_d 为 1 时，强制选择 jump_target_d
+    // 优先级：redirect_e > jump_direct_event_d > pred_taken_f > pc_plus4_f
+    // 注意：jump_direct_event_d 是组合逻辑，它会在跳转指令的 ID 阶段一直为 1
+    // 因此 PC 会在整个 ID 阶段都看到正确的目标，不受时钟边沿限制
+    // ============================================================
+    // pred_taken_gated_f = pred_taken_f AND IF-stage beq/bne decode: the predictor
+    // can never redirect a j/jal/jr or any other non-branch instruction.
+    // An ID-stage direct jump always beats a prediction for the same cycle.
     assign next_pc_f = redirect_e ? correct_pc_e :
                        jump_direct_event_d ? jump_target_d :
-                       pred_taken_f ? pred_target_f : pc_plus4_f;
+                       pred_taken_gated_f ? pred_target_f : pc_plus4_f;
 
+    // ------------------------------------------------------------------
+    // 其他信号
+    // ------------------------------------------------------------------
     assign dmem_valid = valid_m && !overflow_m &&
                         (mem_read_m || mem_write_m);
     assign dmem_write = dmem_valid && mem_write_m;
     assign dmem_wstrb = dmem_write ? 4'b1111 : 4'b0000;
     assign dmem_addr  = alu_result_m;
     assign dmem_wdata = store_data_m;
-
     assign mem_wait = dmem_valid && !dmem_ready;
 
     assign write_enable_w = global_advance && valid_w && reg_write_w &&
@@ -227,7 +242,6 @@ module cpu_core #(
     assign funct_d  = inst_d[5:0];
     assign imm16_d  = inst_d[15:0];
 
-    // WB-to-ID bypass handles a read in the same cycle that WB commits.
     assign rs_decode_value_d = (write_enable_w && (dest_w == rs_d) &&
                                 (rs_d != 5'd0)) ? write_data_w : rs_value_d;
     assign rt_decode_value_d = (write_enable_w && (dest_w == rt_d) &&
@@ -244,13 +258,14 @@ module cpu_core #(
     assign effective_load_stall = load_use_stall && !mem_wait &&
                                   !redirect_e && !jump_direct_event_d;
 
-    // Count instructions actually discarded by a control redirect.  The
-    // ID/EX bubble used for load-use does not discard its held consumer.
     assign flushed_valid_count = (!reset && !mem_wait && redirect_e) ?
                                   (2'd1 + {1'b0, valid_d}) :
                                   ((!reset && !mem_wait &&
                                     jump_direct_event_d) ? 2'd1 : 2'd0);
 
+    // ------------------------------------------------------------------
+    // 组合逻辑
+    // ------------------------------------------------------------------
     always @(*) begin
         case (dest_sel_d)
             `DEST_RD: dest_d = rd_d;
@@ -275,6 +290,9 @@ module cpu_core #(
         endcase
     end
 
+    // ------------------------------------------------------------------
+    // 子模块实例化
+    // ------------------------------------------------------------------
     overflow_status u_overflow_status(
         .clk(clk), .reset(reset), .set_overflow(set_overflow),
         .clear_overflow(clear_overflow),
@@ -308,15 +326,21 @@ module cpu_core #(
         .id_ex_flush(id_ex_flush), .global_advance(global_advance)
     );
 
+    // ============================================================
+    // 关键：PC 寄存器 enable 强制在跳转时为 1
+    // 确保跳转目标在下一个时钟被 PC 采样
+    // ============================================================
+    wire pc_force_enable = pc_enable || jump_direct_event_d;
+
     pc_reg #(.RESET_PC(RESET_PC)) u_pc(
-        .clk(clk), .reset(reset), .enable(pc_enable),
+        .clk(clk), .reset(reset), .enable(pc_force_enable),
         .next_pc(next_pc_f), .pc(pc_f)
     );
 
     if_id_reg u_if_id(
         .clk(clk), .reset(reset), .enable(if_id_enable), .flush(if_id_flush),
         .valid_f(!reset), .pc_f(pc_f), .pc_plus4_f(pc_plus4_f),
-        .inst_f(imem_rdata), .pred_taken_f(pred_taken_f),
+        .inst_f(imem_rdata), .pred_taken_f(pred_taken_gated_f),
         .pred_target_f(pred_target_f), .pred_index_f(pred_index_f),
         .valid_d(valid_d), .pc_d(pc_d), .pc_plus4_d(pc_plus4_d),
         .inst_d(inst_d), .pred_taken_d(pred_taken_d),
